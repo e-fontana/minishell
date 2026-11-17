@@ -64,6 +64,11 @@ check line_too_long "${long_line}\\nexit\\n" '> minishell: linha muito longa\n> 
 check too_many_args "${many_args}\\nexit\\n" '> minishell: argumentos demais\n> Encerrando o minishell.\n'
 check echo_args 'echo a b c\nexit\n' '> a b c\n> Encerrando o minishell.\n'
 check_contains cat_file 'cat Makefile\nexit\n' 'minishell'
+rm -f /tmp/ms_out.txt
+check redirect_writes_file 'echo hi > /tmp/ms_out.txt\ncat /tmp/ms_out.txt\nexit\n' '> > hi\n> Encerrando o minishell.\n'
+check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao foi possivel abrir /nao/existe/f: No such file or directory\n> Encerrando o minishell.\n'
+check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
+check builtin_with_redirect 'cd /tmp > f\nexit\n' '> minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n> Encerrando o minishell.\n'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

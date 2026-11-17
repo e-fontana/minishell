@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,9 +24,32 @@ static void report_exec_failure(const char *name, int error)
     }
 }
 
-static void run_child(char *const *argv)
+static void redirect_output(const char *path)
 {
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if (fd < 0) {
+        int error = errno;
+        write_str(STDERR_FILENO, "minishell: nao foi possivel abrir ");
+        write_str(STDERR_FILENO, path);
+        write_str(STDERR_FILENO, ": ");
+        write_str(STDERR_FILENO, strerror(error));
+        write_str(STDERR_FILENO, "\n");
+        _exit(1);
+    }
+    if (fd != STDOUT_FILENO) {
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+}
+
+static void run_child(const Command *cmd)
+{
+    char *const *argv = cmd->argv;
+
     signal(SIGINT, SIG_DFL);
+    if (cmd->out_file != NULL)
+        redirect_output(cmd->out_file);
     execvp(argv[0], argv);
 
     int error = errno;
@@ -43,7 +67,7 @@ static int run_command(const Command *cmd)
     }
 
     if (pid == 0)
-        run_child(cmd->argv);
+        run_child(cmd);
 
     int status;
 

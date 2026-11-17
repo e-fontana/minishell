@@ -36,6 +36,10 @@ int builtin_run(const Command *cmd, int *keep_running)
 
     for (size_t i = 0; i < count; i++) {
         if (strcmp(cmd->argv[0], builtins[i].name) == 0) {
+            if (cmd->out_file != NULL) {
+                write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n");
+                return 1;
+            }
             builtins[i].run(cmd->argv, keep_running);
             return 1;
         }

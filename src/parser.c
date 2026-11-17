@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <string.h>
 
 #include "parser.h"
 
@@ -18,7 +19,14 @@ static char *next_token(char **cursor)
 
     while (**cursor != '\0' && !is_separator(**cursor))
         (*cursor)++;
+    if (**cursor != '\0')
+        *(*cursor)++ = '\0';
     return token;
+}
+
+static int is_redirect(const char *token)
+{
+    return strcmp(token, ">") == 0;
 }
 
 static void start_command(Command *cmd)
@@ -37,6 +45,16 @@ static ParseStatus add_word(Command *cmd, char *word)
     return PARSE_OK;
 }
 
+static ParseStatus set_out_file(Command *cmd, char **cursor)
+{
+    char *file = next_token(cursor);
+
+    if (cmd->argc == 0 || cmd->out_file != NULL || file == NULL || is_redirect(file))
+        return PARSE_SYNTAX_ERROR;
+    cmd->out_file = file;
+    return PARSE_OK;
+}
+
 ParseStatus parse_line(char *line, Pipeline *out)
 {
     char *cursor = line;
@@ -47,7 +65,9 @@ ParseStatus parse_line(char *line, Pipeline *out)
     start_command(current);
 
     while ((token = next_token(&cursor)) != NULL) {
-        ParseStatus status = add_word(current, token);
+        ParseStatus status = is_redirect(token)
+            ? set_out_file(current, &cursor)
+            : add_word(current, token);
         if (status != PARSE_OK)
             return status;
     }
