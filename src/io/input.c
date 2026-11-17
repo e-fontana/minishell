@@ -1,6 +1,6 @@
 #include <unistd.h>
 
-#include "input.h"
+#include "io/input.h"
 
 ReadStatus read_line(char *line, int size)
 {

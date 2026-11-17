@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "parser.h"
+#include "parser/parser.h"
 
 static int is_separator(char c)
 {

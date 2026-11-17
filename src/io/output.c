@@ -1,7 +1,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "output.h"
+#include "io/output.h"
 
 void write_str(int fd, const char *text)
 {

@@ -37,34 +37,34 @@ make clean              # remove build/ and ./minishell
 | File              | Responsibility                                                          |
 |-------------------|-------------------------------------------------------------------------|
 | `src/main.c`      | Main loop: prompt, read, parse, dispatch to a builtin or the executor, refuse builtins in a pipeline or with `>`; `--trace` flag |
-| `src/input.c`     | `read_line()` reads one line from stdin, one byte per `read()`           |
-| `src/parser.c`    | `parse_line()` splits a line into a `Pipeline` of `Command`s; no system calls |
-| `src/executor.c`  | `exec_pipeline()` creates pipes, forks each stage, redirects, execs and waits |
-| `src/builtins.c`  | Table of builtins (`cd`, `exit`) and the misuse message                  |
-| `src/output.c`    | `write_str()` writes a string to a descriptor with `write()`             |
-| `src/trace.c`     | `trace()` prints `[trace]` lines to stderr when `--trace` is on          |
+| `src/io/input.c`     | `read_line()` reads one line from stdin, one byte per `read()`           |
+| `src/parser/parser.c`    | `parse_line()` splits a line into a `Pipeline` of `Command`s; no system calls |
+| `src/exec/executor.c`  | `exec_pipeline()` creates pipes, forks each stage, redirects, execs and waits |
+| `src/exec/builtins.c`  | Table of builtins (`cd`, `exit`) and the misuse message                  |
+| `src/io/output.c`    | `write_str()` writes a string to a descriptor with `write()`             |
+| `src/util/trace.c`     | `trace()` prints `[trace]` lines to stderr when `--trace` is on          |
 
-Each module except `main.c` has a matching `include/X.h` exposing only what
+Each module except `main.c` has a matching `include/<dir>/X.h` (included as `"<dir>/X.h"`) exposing only what
 other modules use.
 
 ## System calls
 
 | Call        | Module                              | Purpose                                              |
 |-------------|-------------------------------------|------------------------------------------------------|
-| `read()`    | `src/input.c`                       | Read the command line from descriptor 0              |
-| `write()`   | `src/output.c`, `src/trace.c`       | Prompt, messages and trace lines                     |
-| `fork()`    | `src/executor.c`                    | Create one child per command                         |
-| `execvp()`  | `src/executor.c`                    | Replace the child with the program, searching `PATH` |
-| `waitpid()` | `src/executor.c`                    | Wait for each child and decode its status            |
-| `pipe()`    | `src/executor.c`                    | Connect one command's output to the next one's input |
-| `dup2()`    | `src/executor.c`                    | Move pipe ends and the output file onto fds 0 and 1  |
-| `open()`    | `src/executor.c`                    | Open the file after `>` (`O_WRONLY O_CREAT O_TRUNC`) |
-| `close()`   | `src/executor.c`                    | Close unused pipe ends in parent and children        |
-| `chdir()`   | `src/builtins.c`                    | Builtin `cd`                                         |
-| `signal()`  | `src/main.c`, `src/executor.c`      | Shell ignores SIGINT; children restore the default   |
-| `_exit()`   | `src/executor.c`                    | End a child when `open`, `dup2` or `execvp` fails    |
-| `strerror()` | `src/executor.c`                   | Text of `errno` in `open`, `exec`, `dup2`, `pipe`, `fork` and `wait` errors |
-| `perror()`  | `src/builtins.c`                    | Error message of the builtin `cd`                    |
+| `read()`    | `src/io/input.c`                       | Read the command line from descriptor 0              |
+| `write()`   | `src/io/output.c`, `src/util/trace.c`       | Prompt, messages and trace lines                     |
+| `fork()`    | `src/exec/executor.c`                    | Create one child per command                         |
+| `execvp()`  | `src/exec/executor.c`                    | Replace the child with the program, searching `PATH` |
+| `waitpid()` | `src/exec/executor.c`                    | Wait for each child and decode its status            |
+| `pipe()`    | `src/exec/executor.c`                    | Connect one command's output to the next one's input |
+| `dup2()`    | `src/exec/executor.c`                    | Move pipe ends and the output file onto fds 0 and 1  |
+| `open()`    | `src/exec/executor.c`                    | Open the file after `>` (`O_WRONLY O_CREAT O_TRUNC`) |
+| `close()`   | `src/exec/executor.c`                    | Close unused pipe ends in parent and children        |
+| `chdir()`   | `src/exec/builtins.c`                    | Builtin `cd`                                         |
+| `signal()`  | `src/main.c`, `src/exec/executor.c`      | Shell ignores SIGINT; children restore the default   |
+| `_exit()`   | `src/exec/executor.c`                    | End a child when `open`, `dup2` or `execvp` fails    |
+| `strerror()` | `src/exec/executor.c`                   | Text of `errno` in `open`, `exec`, `dup2`, `pipe`, `fork` and `wait` errors |
+| `perror()`  | `src/exec/builtins.c`                    | Error message of the builtin `cd`                    |
 
 Exit statuses of children: 127 command not found, 126 other exec failure,
 1 when the `>` file cannot be opened, 128+n when killed by signal n.

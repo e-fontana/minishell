@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "trace.h"
+#include "util/trace.h"
 
 #define TRACE_LINE_SIZE 256
 
