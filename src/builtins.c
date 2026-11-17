@@ -30,19 +30,35 @@ static const Builtin builtins[] = {
     { "cd", builtin_cd },
 };
 
-int builtin_run(const Command *cmd, int *keep_running)
+static const Builtin *find_builtin(const char *name)
 {
     size_t count = sizeof(builtins) / sizeof(builtins[0]);
 
-    for (size_t i = 0; i < count; i++) {
-        if (strcmp(cmd->argv[0], builtins[i].name) == 0) {
-            if (cmd->out_file != NULL) {
-                write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n");
-                return 1;
-            }
-            builtins[i].run(cmd->argv, keep_running);
-            return 1;
-        }
-    }
-    return 0;
+    for (size_t i = 0; i < count; i++)
+        if (strcmp(name, builtins[i].name) == 0)
+            return &builtins[i];
+    return NULL;
+}
+
+int is_builtin(const char *name)
+{
+    return find_builtin(name) != NULL;
+}
+
+void report_builtin_misuse(void)
+{
+    write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n");
+}
+
+int builtin_run(const Command *cmd, int *keep_running)
+{
+    const Builtin *builtin = find_builtin(cmd->argv[0]);
+
+    if (builtin == NULL)
+        return 0;
+    if (cmd->out_file != NULL)
+        report_builtin_misuse();
+    else
+        builtin->run(cmd->argv, keep_running);
+    return 1;
 }

@@ -8,7 +8,7 @@ passed=0
 failed=0
 
 run_shell() {
-    printf "$1" | "$SHELL_BIN" 2>&1
+    printf "$1" | timeout 10 "$SHELL_BIN" 2>&1
     printf x
 }
 
@@ -39,6 +39,14 @@ check_contains() {
     esac
 }
 
+check_absent() {
+    if [ -e "$2" ]; then
+        record "$1" fail
+    else
+        record "$1" ok
+    fi
+}
+
 repeat() {
     count=0
     result=
@@ -51,6 +59,8 @@ repeat() {
 
 long_line=$(repeat a 1100)
 many_args="echo$(repeat ' x' 70)"
+nine_stages="echo a$(repeat ' | echo a' 8)"
+builtin_message='minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento'
 
 check echo_then_exit 'echo hi\nexit\n' '> hi\n> Encerrando o minishell.\n'
 check eof_after_command 'echo hi\n' '> hi\n> \nEncerrando o minishell.\n'
@@ -66,9 +76,22 @@ check echo_args 'echo a b c\nexit\n' '> a b c\n> Encerrando o minishell.\n'
 check_contains cat_file 'cat Makefile\nexit\n' 'minishell'
 rm -f /tmp/ms_out.txt
 check redirect_writes_file 'echo hi > /tmp/ms_out.txt\ncat /tmp/ms_out.txt\nexit\n' '> > hi\n> Encerrando o minishell.\n'
+rm -f /tmp/ms_out.txt
 check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao foi possivel abrir /nao/existe/f: No such file or directory\n> Encerrando o minishell.\n'
 check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
-check builtin_with_redirect 'cd /tmp > f\nexit\n' '> minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n> Encerrando o minishell.\n'
+rm -f /tmp/ms_builtin_redirect.txt
+check builtin_with_redirect 'cd /tmp > /tmp/ms_builtin_redirect.txt\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
+check_absent builtin_with_redirect_creates_no_file /tmp/ms_builtin_redirect.txt
+check pipe_basic 'echo a b c | wc -w\nexit\n' '> 3\n> Encerrando o minishell.\n'
+check pipe_three_stages 'echo hi | cat | cat\nexit\n' '> hi\n> Encerrando o minishell.\n'
+check pipe_does_not_hang 'yes | head -1\nexit\n' '> y\n> Encerrando o minishell.\n'
+rm -f /tmp/ms_p.txt
+check pipe_into_file 'echo hi | cat > /tmp/ms_p.txt\ncat /tmp/ms_p.txt\nexit\n' '> > hi\n> Encerrando o minishell.\n'
+rm -f /tmp/ms_p.txt
+check pipe_syntax_error 'ls |\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
+check pipe_too_many_commands "${nine_stages}\\nexit\\n" '> minishell: comandos demais no pipeline\n> Encerrando o minishell.\n'
+check builtin_in_pipeline 'cd /tmp | cat\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
+check_contains pipe_missing_command_keeps_going 'naoexiste | echo ok\nexit\n' 'ok'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

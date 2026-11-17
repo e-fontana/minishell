@@ -17,6 +17,14 @@ static void report_parse_error(ParseStatus status)
         write_str(STDERR_FILENO, "minishell: comandos demais no pipeline\n");
 }
 
+static int pipeline_has_builtin(const Pipeline *pipeline)
+{
+    for (int i = 0; i < pipeline->count; i++)
+        if (is_builtin(pipeline->cmds[i].argv[0]))
+            return 1;
+    return 0;
+}
+
 int main(void)
 {
     char line[LINE_SIZE];
@@ -46,6 +54,10 @@ int main(void)
 
         if (pipeline.count == 1 && builtin_run(&pipeline.cmds[0], &keep_running))
             continue;
+        if (pipeline.count > 1 && pipeline_has_builtin(&pipeline)) {
+            report_builtin_misuse();
+            continue;
+        }
 
         exec_pipeline(&pipeline);
     }
