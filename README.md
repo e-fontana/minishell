@@ -1,117 +1,134 @@
 # Mini Shell
 
-Projeto Integrador de Sistemas Operacionais (UFBA): um interpretador de
-comandos simples, escrito em C, que usa diretamente as chamadas ao sistema do
-Linux para ler comandos, criar processos e executar programas.
+A small Unix command interpreter written in C for the Operating Systems course
+project (Projeto Integrador de Sistemas Operacionais, UFBA). It reads commands
+with `read()`, starts processes with `fork()` and `execvp()`, connects them
+with `pipe()` and `dup2()`, and waits for them with `waitpid()`, calling the
+system directly instead of relying on `system()` or stdio for input. Messages
+printed to the user are in Portuguese without accents.
 
-## Como compilar e rodar
+## Build, run, test
 
-Requisitos: Linux, `gcc` e `make`.
-
-```bash
-make
-./minishell
-```
-
-Sem `make`:
+Requirements: Linux, `gcc` and `make`.
 
 ```bash
-gcc -Wall -Wextra -Iinclude -o minishell src/*.c
+make                    # objects in build/, binary ./minishell
+./minishell             # start the shell; leave with exit or Ctrl+D
+./minishell --trace     # also print system calls to stderr
+make test               # parser unit tests, then end-to-end scenarios
+make clean              # remove build/ and ./minishell
 ```
 
-`make clean` apaga o executável e a pasta `build/`.
+## Supported syntax
 
-Para sair do shell, digite `exit` (ou pressione Ctrl+D).
+- A simple command with arguments: `ls -l /tmp`.
+- Output redirection to a file (created or truncated): `echo hi > out.txt`.
+  Only on the last command of a line.
+- Pipes between up to 8 commands: `ls | grep c | wc -l`.
+- Builtins `cd DIR` and `exit`, run by the shell itself.
+- Tokens are separated by spaces or tabs, so `ls|wc` and `a>b` are ordinary
+  words, not operators.
+- Malformed `>` or `|` usage (`echo >`, `| ls`, a second `>`, `>` on a
+  non-final command) prints `minishell: erro de sintaxe` and returns to the prompt.
+- Ctrl+C stops the running command, not the shell.
 
-## Estrutura do código
+## Modules
+
+| File              | Responsibility                                                          |
+|-------------------|-------------------------------------------------------------------------|
+| `src/main.c`      | Main loop: prompt, read, parse, dispatch to a builtin or the executor, refuse builtins in a pipeline or with `>`; `--trace` flag |
+| `src/input.c`     | `read_line()` reads one line from stdin, one byte per `read()`           |
+| `src/parser.c`    | `parse_line()` splits a line into a `Pipeline` of `Command`s; no system calls |
+| `src/executor.c`  | `exec_pipeline()` creates pipes, forks each stage, redirects, execs and waits |
+| `src/builtins.c`  | Table of builtins (`cd`, `exit`) and the misuse message                  |
+| `src/output.c`    | `write_str()` writes a string to a descriptor with `write()`             |
+| `src/trace.c`     | `trace()` prints `[trace]` lines to stderr when `--trace` is on          |
+
+Each module except `main.c` has a matching `include/X.h` exposing only what
+other modules use.
+
+## System calls
+
+| Call        | Module                              | Purpose                                              |
+|-------------|-------------------------------------|------------------------------------------------------|
+| `read()`    | `src/input.c`                       | Read the command line from descriptor 0              |
+| `write()`   | `src/output.c`, `src/trace.c`       | Prompt, messages and trace lines                     |
+| `fork()`    | `src/executor.c`                    | Create one child per command                         |
+| `execvp()`  | `src/executor.c`                    | Replace the child with the program, searching `PATH` |
+| `waitpid()` | `src/executor.c`                    | Wait for each child and decode its status            |
+| `pipe()`    | `src/executor.c`                    | Connect one command's output to the next one's input |
+| `dup2()`    | `src/executor.c`                    | Move pipe ends and the output file onto fds 0 and 1  |
+| `open()`    | `src/executor.c`                    | Open the file after `>` (`O_WRONLY O_CREAT O_TRUNC`) |
+| `close()`   | `src/executor.c`                    | Close unused pipe ends in parent and children        |
+| `chdir()`   | `src/builtins.c`                    | Builtin `cd`                                         |
+| `signal()`  | `src/main.c`, `src/executor.c`      | Shell ignores SIGINT; children restore the default   |
+| `_exit()`   | `src/executor.c`                    | End a child when `open`, `dup2` or `execvp` fails    |
+| `strerror()` | `src/executor.c`                   | Text of `errno` in `open`, `exec`, `dup2`, `pipe`, `fork` and `wait` errors |
+| `perror()`  | `src/builtins.c`                    | Error message of the builtin `cd`                    |
+
+Exit statuses of children: 127 command not found, 126 other exec failure,
+1 when the `>` file cannot be opened, 128+n when killed by signal n.
+
+## Tracing
+
+With `--trace` (the first argument), the shell writes one line to stderr for
+each `pipe`, `fork`, `dup2`, `execvp` and `waitpid`. Parent and child lines may
+interleave in any order. Captured run:
 
 ```
-minishell/
-├── Makefile
-├── README.md
-├── include/
-│   └── minishell.h    constantes e protótipos
-├── src/
-│   ├── main.c         laço principal e comandos internos
-│   ├── leitura.c      leitura e parsing
-│   ├── execucao.c     criação de processo e execução
-│   └── saida.c        escrita na tela
-└── build/             arquivos .o (gerada pelo make)
+> echo a b c | wc -w > contagem.txt
+[trace] pipe -> 3 4
+[trace] fork -> child 177259
+[trace] dup2(4, 1)
+[trace] execvp echo
+[trace] fork -> child 177260
+[trace] dup2(3, 0)
+[trace] dup2(3, 1)
+[trace] execvp wc
+[trace] wait 177259 -> status 0
+[trace] wait 177260 -> status 0
+> cat contagem.txt
+[trace] fork -> child 177275
+[trace] execvp cat
+3
+[trace] wait 177275 -> status 0
+> exit
+Encerrando o minishell.
 ```
 
-| Arquivo                | Responsabilidade                                                    |
-|------------------------|---------------------------------------------------------------------|
-| `src/main.c`           | Laço principal (prompt, leitura, parsing, execução) e comandos internos `exit` e `cd` |
-| `src/leitura.c`        | `ler_linha()` lê a entrada com `read()`; `separar_argumentos()` faz o parsing |
-| `src/execucao.c`       | `executar_comando()` faz `fork()`, `execvp()` e `wait()`             |
-| `src/saida.c`          | `escrever()` envia texto para a tela com `write()`                   |
-| `include/minishell.h`  | Constantes e protótipos                                              |
-
-Fluxo de cada comando:
-
-1. O shell escreve o prompt `> `.
-2. Lê uma linha da entrada padrão.
-3. Separa a linha em palavras (`ls -l` vira `{"ls", "-l", NULL}`).
-4. Se for `exit` ou `cd`, trata no próprio shell.
-5. Caso contrário, cria um filho com `fork()`; o filho chama `execvp()` e o pai
-   fica bloqueado em `wait()` até o filho terminar.
-
-## Chamadas ao sistema utilizadas
-
-| Chamada    | Onde                           | Para quê                                                        |
-|------------|--------------------------------|-----------------------------------------------------------------|
-| `read()`   | `src/leitura.c`                | Ler o comando da entrada padrão (descritor 0)                    |
-| `write()`  | `src/saida.c`                  | Escrever o prompt e as mensagens (descritores 1 e 2)             |
-| `fork()`   | `src/execucao.c`               | Criar o processo filho                                           |
-| `execvp()` | `src/execucao.c`               | Substituir o filho pelo programa pedido, procurando no `PATH`    |
-| `wait()`   | `src/execucao.c`               | Fazer o pai aguardar o término do filho                          |
-| `chdir()`  | `src/main.c`                   | Implementar o comando interno `cd`                               |
-| `signal()` | `src/main.c`, `src/execucao.c` | Ctrl+C encerra só o comando em execução, não o shell             |
-| `_exit()`  | `src/execucao.c`               | Encerrar o filho quando o `execvp()` falha                       |
-
-`perror()` e `strerror()` são usadas para transformar o código de erro
-(`errno`) em mensagem.
-
-## Exemplos de comandos testados
+## Example session
 
 ```
 > echo Ola mundo
 Ola mundo
-> ls -l
-total 44
-drwxr-xr-x 2 fontana fontana  4096 16 nov 16:36 build
-drwxr-xr-x 2 fontana fontana  4096 16 nov 16:36 include
--rw-r--r-- 1 fontana fontana   332 16 nov 16:36 Makefile
--rwxr-xr-x 1 fontana fontana 16944 16 nov 16:36 minishell
--rw-r--r-- 1 fontana fontana  4436 16 nov 16:36 README.md
-drwxr-xr-x 2 fontana fontana  4096 16 nov 16:36 src
-> cat include/minishell.h
-#ifndef MINISHELL_H
-#define MINISHELL_H
-...
+> ls
+Makefile  include  notes.txt  src  tests
+> echo primeira linha > saida.txt
+> cat saida.txt
+primeira linha
+> ls | wc -l
+6
+> echo a b c | wc -w
+3
 > comandoquenaoexiste
 minishell: comando nao encontrado: comandoquenaoexiste
-> ls /pasta/inexistente
-ls: cannot access '/pasta/inexistente': No such file or directory
-> cd /tmp
-> pwd
-/tmp
 > cd /nao/existe
 minishell: cd: No such file or directory
 > exit
 Encerrando o minishell.
 ```
 
-## Limitações conhecidas
+## Limits
 
-- Não há pipes (`|`), redirecionamento (`>`, `<`) nem execução em segundo
-  plano (`&`).
-- Não há aspas nem caracteres de escape: `echo "a   b"` é separado nos espaços
-  e as aspas são passadas literalmente ao comando.
-- Não há expansão de variáveis (`$HOME`), de `~` nem de curingas (`*.c`).
-- Só um comando por linha (sem `;`, `&&`, `||`).
-- Linha limitada a 1023 caracteres e 63 argumentos; acima disso o shell avisa e
-  ignora a linha.
-- `cd` exige o diretório (sem argumento não vai para o `HOME`).
-- Sem histórico nem edição de linha com as setas.
-- A leitura é feita um byte por `read()`, o que é simples mas pouco eficiente.
+1023 characters per line, 63 words per command, 8 commands per pipeline. Over
+a limit the shell prints a warning, ignores the line and keeps running.
+
+## Known limitations
+
+- No quotes or escapes: `echo "a   b"` splits on spaces and passes the quotes.
+- No expansion of `$VAR`, `~` or wildcards.
+- No `<`, no `>>`, no background `&`, no `;`, `&&` or `||`.
+- Builtins cannot be used inside a pipeline or with `>`.
+- `cd` needs a directory; it does not default to `HOME`.
+- No history and no line editing.
+- Input is read one byte per `read()`: simple, but slow.
