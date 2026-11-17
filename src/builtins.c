@@ -7,16 +7,16 @@
 
 typedef struct {
     const char *name;
-    void (*run)(char **argv, int *keep_running);
+    void (*run)(char *const *argv, int *keep_running);
 } Builtin;
 
-static void builtin_exit(char **argv, int *keep_running)
+static void builtin_exit(char *const *argv, int *keep_running)
 {
     (void)argv;
     *keep_running = 0;
 }
 
-static void builtin_cd(char **argv, int *keep_running)
+static void builtin_cd(char *const *argv, int *keep_running)
 {
     (void)keep_running;
     if (argv[1] == NULL)
@@ -30,13 +30,13 @@ static const Builtin builtins[] = {
     { "cd", builtin_cd },
 };
 
-int builtin_run(char **argv, int *keep_running)
+int builtin_run(const Command *cmd, int *keep_running)
 {
     size_t count = sizeof(builtins) / sizeof(builtins[0]);
 
     for (size_t i = 0; i < count; i++) {
-        if (strcmp(argv[0], builtins[i].name) == 0) {
-            builtins[i].run(argv, keep_running);
+        if (strcmp(cmd->argv[0], builtins[i].name) == 0) {
+            builtins[i].run(cmd->argv, keep_running);
             return 1;
         }
     }

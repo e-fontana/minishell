@@ -7,10 +7,20 @@
 #include "output.h"
 #include "parser.h"
 
+static void report_parse_error(ParseStatus status)
+{
+    if (status == PARSE_TOO_MANY_ARGS)
+        write_str(STDERR_FILENO, "minishell: argumentos demais\n");
+    else if (status == PARSE_SYNTAX_ERROR)
+        write_str(STDERR_FILENO, "minishell: erro de sintaxe\n");
+    else if (status == PARSE_TOO_MANY_CMDS)
+        write_str(STDERR_FILENO, "minishell: comandos demais no pipeline\n");
+}
+
 int main(void)
 {
     char line[LINE_SIZE];
-    char *argv[MAX_ARGS];
+    Pipeline pipeline;
     int keep_running = 1;
 
     signal(SIGINT, SIG_IGN);
@@ -28,18 +38,16 @@ int main(void)
             continue;
         }
 
-        int word_count = split_words(line, argv, MAX_ARGS);
-        if (word_count < 0) {
-            write_str(STDERR_FILENO, "minishell: argumentos demais\n");
+        ParseStatus parse_status = parse_line(line, &pipeline);
+        if (parse_status != PARSE_OK) {
+            report_parse_error(parse_status);
             continue;
         }
-        if (word_count == 0)
+
+        if (pipeline.count == 1 && builtin_run(&pipeline.cmds[0], &keep_running))
             continue;
 
-        if (builtin_run(argv, &keep_running))
-            continue;
-
-        exec_command(argv);
+        exec_pipeline(&pipeline);
     }
 
     write_str(STDOUT_FILENO, "Encerrando o minishell.\n");

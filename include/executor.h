@@ -1,6 +1,8 @@
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
-int exec_command(char **argv);
+#include "parser.h"
+
+int exec_pipeline(const Pipeline *pipeline);
 
 #endif

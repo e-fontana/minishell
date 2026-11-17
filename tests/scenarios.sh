@@ -62,6 +62,8 @@ check cd_missing_dir 'cd /nao/existe\nexit\n' '> minishell: cd: No such file or 
 check cd_then_pwd 'cd /tmp\npwd\nexit\n' '> > /tmp\n> Encerrando o minishell.\n'
 check line_too_long "${long_line}\\nexit\\n" '> minishell: linha muito longa\n> Encerrando o minishell.\n'
 check too_many_args "${many_args}\\nexit\\n" '> minishell: argumentos demais\n> Encerrando o minishell.\n'
+check echo_args 'echo a b c\nexit\n' '> a b c\n> Encerrando o minishell.\n'
+check_contains cat_file 'cat Makefile\nexit\n' 'minishell'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

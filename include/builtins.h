@@ -1,6 +1,8 @@
 #ifndef BUILTINS_H
 #define BUILTINS_H
 
-int builtin_run(char **argv, int *keep_running);
+#include "parser.h"
+
+int builtin_run(const Command *cmd, int *keep_running);
 
 #endif

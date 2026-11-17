@@ -23,7 +23,7 @@ static void report_exec_failure(const char *name, int error)
     }
 }
 
-static void run_child(char **argv)
+static void run_child(char *const *argv)
 {
     signal(SIGINT, SIG_DFL);
     execvp(argv[0], argv);
@@ -33,7 +33,7 @@ static void run_child(char **argv)
     _exit(error == ENOENT ? 127 : 126);
 }
 
-int exec_command(char **argv)
+static int run_command(const Command *cmd)
 {
     pid_t pid = fork();
 
@@ -43,7 +43,7 @@ int exec_command(char **argv)
     }
 
     if (pid == 0)
-        run_child(argv);
+        run_child(cmd->argv);
 
     int status;
 
@@ -57,4 +57,9 @@ int exec_command(char **argv)
         return 128 + WTERMSIG(status);
     }
     return WEXITSTATUS(status);
+}
+
+int exec_pipeline(const Pipeline *pipeline)
+{
+    return run_command(&pipeline->cmds[0]);
 }

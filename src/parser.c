@@ -7,25 +7,54 @@ static int is_separator(char c)
     return c == ' ' || c == '\t';
 }
 
-int split_words(char *line, char **argv, int max_args)
+static char *next_token(char **cursor)
 {
-    int count = 0;
+    while (is_separator(**cursor))
+        *(*cursor)++ = '\0';
+    if (**cursor == '\0')
+        return NULL;
+
+    char *token = *cursor;
+
+    while (**cursor != '\0' && !is_separator(**cursor))
+        (*cursor)++;
+    return token;
+}
+
+static void start_command(Command *cmd)
+{
+    cmd->argc = 0;
+    cmd->argv[0] = NULL;
+    cmd->out_file = NULL;
+}
+
+static ParseStatus add_word(Command *cmd, char *word)
+{
+    if (cmd->argc >= MAX_ARGS - 1)
+        return PARSE_TOO_MANY_ARGS;
+    cmd->argv[cmd->argc++] = word;
+    cmd->argv[cmd->argc] = NULL;
+    return PARSE_OK;
+}
+
+ParseStatus parse_line(char *line, Pipeline *out)
+{
     char *cursor = line;
+    char *token;
+    Command *current = &out->cmds[0];
 
-    while (*cursor != '\0') {
-        while (is_separator(*cursor))
-            *cursor++ = '\0';
-        if (*cursor == '\0')
-            break;
+    out->count = 0;
+    start_command(current);
 
-        if (count >= max_args - 1)
-            return -1;
-        argv[count++] = cursor;
-
-        while (*cursor != '\0' && !is_separator(*cursor))
-            cursor++;
+    while ((token = next_token(&cursor)) != NULL) {
+        ParseStatus status = add_word(current, token);
+        if (status != PARSE_OK)
+            return status;
     }
 
-    argv[count] = NULL;
-    return count;
+    if (current->argc == 0)
+        return PARSE_EMPTY;
+
+    out->count = 1;
+    return PARSE_OK;
 }
