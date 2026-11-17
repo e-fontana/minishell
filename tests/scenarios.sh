@@ -4,6 +4,8 @@ LC_ALL=C
 export LC_ALL
 
 SHELL_BIN=./minishell
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
 passed=0
 failed=0
 
@@ -81,21 +83,16 @@ check cd_then_pwd 'cd /tmp\npwd\nexit\n' '> > /tmp\n> Encerrando o minishell.\n'
 check line_too_long "${long_line}\\nexit\\n" '> minishell: linha muito longa\n> Encerrando o minishell.\n'
 check too_many_args "${many_args}\\nexit\\n" '> minishell: argumentos demais\n> Encerrando o minishell.\n'
 check echo_args 'echo a b c\nexit\n' '> a b c\n> Encerrando o minishell.\n'
-check_contains cat_file 'cat Makefile\nexit\n' 'minishell'
-rm -f /tmp/ms_out.txt
-check redirect_writes_file 'echo hi > /tmp/ms_out.txt\ncat /tmp/ms_out.txt\nexit\n' '> > hi\n> Encerrando o minishell.\n'
-rm -f /tmp/ms_out.txt
+check_contains cat_file 'cat Makefile\nexit\n' 'CFLAGS ='
+check redirect_writes_file "echo hi > $work/ms_out.txt\\ncat $work/ms_out.txt\\nexit\\n" '> > hi\n> Encerrando o minishell.\n'
 check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao foi possivel abrir /nao/existe/f: No such file or directory\n> Encerrando o minishell.\n'
 check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
-rm -f /tmp/ms_builtin_redirect.txt
-check builtin_with_redirect 'cd /tmp > /tmp/ms_builtin_redirect.txt\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
-check_absent builtin_with_redirect_creates_no_file /tmp/ms_builtin_redirect.txt
+check builtin_with_redirect "cd /tmp > $work/ms_builtin_redirect.txt\\nexit\\n" "> ${builtin_message}\\n> Encerrando o minishell.\\n"
+check_absent builtin_with_redirect_creates_no_file "$work/ms_builtin_redirect.txt"
 check pipe_basic 'echo a b c | wc -w\nexit\n' '> 3\n> Encerrando o minishell.\n'
 check pipe_three_stages 'echo hi | cat | cat\nexit\n' '> hi\n> Encerrando o minishell.\n'
 check pipe_does_not_hang 'yes | head -1\nexit\n' '> y\n> Encerrando o minishell.\n'
-rm -f /tmp/ms_p.txt
-check pipe_into_file 'echo hi | cat > /tmp/ms_p.txt\ncat /tmp/ms_p.txt\nexit\n' '> > hi\n> Encerrando o minishell.\n'
-rm -f /tmp/ms_p.txt
+check pipe_into_file "echo hi | cat > $work/ms_p.txt\\ncat $work/ms_p.txt\\nexit\\n" '> > hi\n> Encerrando o minishell.\n'
 check pipe_syntax_error 'ls |\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
 check pipe_too_many_commands "${nine_stages}\\nexit\\n" '> minishell: comandos demais no pipeline\n> Encerrando o minishell.\n'
 check builtin_in_pipeline 'cd /tmp | cat\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
@@ -103,9 +100,7 @@ check_contains pipe_missing_command_keeps_going 'naoexiste | echo ok\nexit\n' 'o
 check_contains trace_fork_exec_wait_fork 'echo hi\nexit\n' '[trace] fork -> child ' --trace
 check_contains trace_fork_exec_wait_execvp 'echo hi\nexit\n' '[trace] execvp echo' --trace
 check_contains trace_fork_exec_wait_wait 'echo hi\nexit\n' '[trace] wait ' --trace
-rm -f /tmp/ms_t.txt
-check_contains trace_redirect 'echo hi > /tmp/ms_t.txt\nexit\n' '[trace] dup2(' --trace
-rm -f /tmp/ms_t.txt
+check_contains trace_redirect "echo hi > $work/ms_t.txt\\nexit\\n" '[trace] dup2(' --trace
 check_contains trace_pipe 'echo hi | cat\nexit\n' '[trace] pipe -> ' --trace
 check_not_contains trace_off_by_default 'echo hi\nexit\n' '[trace]'
 check_contains trace_off_by_default_keeps_output 'echo hi\nexit\n' '> hi'
