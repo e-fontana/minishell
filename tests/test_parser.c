@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "parser.h"
+#include "parser/parser.h"
 
 static void build_words(char *line, int word_count)
 {

@@ -2,12 +2,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "builtins.h"
-#include "executor.h"
-#include "input.h"
-#include "output.h"
-#include "parser.h"
-#include "trace.h"
+#include "exec/builtins.h"
+#include "exec/executor.h"
+#include "io/input.h"
+#include "io/output.h"
+#include "parser/parser.h"
+#include "util/trace.h"
 
 static void report_parse_error(ParseStatus status)
 {
