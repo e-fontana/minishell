@@ -1,4 +1,5 @@
 #include <signal.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "builtins.h"
@@ -6,6 +7,7 @@
 #include "input.h"
 #include "output.h"
 #include "parser.h"
+#include "trace.h"
 
 static void report_parse_error(ParseStatus status)
 {
@@ -25,12 +27,14 @@ static int pipeline_has_builtin(const Pipeline *pipeline)
     return 0;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     char line[LINE_SIZE];
     Pipeline pipeline;
     int keep_running = 1;
 
+    if (argc > 1 && strcmp(argv[1], "--trace") == 0)
+        trace_enable(1);
     signal(SIGINT, SIG_IGN);
 
     while (keep_running) {

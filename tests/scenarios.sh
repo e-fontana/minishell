@@ -8,7 +8,7 @@ passed=0
 failed=0
 
 run_shell() {
-    printf "$1" | timeout 10 "$SHELL_BIN" 2>&1
+    printf "$1" | timeout 10 "$SHELL_BIN" $2 2>&1 | head -c 100000
     printf x
 }
 
@@ -32,10 +32,18 @@ check() {
 }
 
 check_contains() {
-    actual=$(run_shell "$2")
+    actual=$(run_shell "$2" "$4")
     case "$actual" in
         *"$3"*) record "$1" ok ;;
         *) record "$1" fail ;;
+    esac
+}
+
+check_not_contains() {
+    actual=$(run_shell "$2" "$4")
+    case "$actual" in
+        *"$3"*) record "$1" fail ;;
+        *) record "$1" ok ;;
     esac
 }
 
@@ -92,6 +100,14 @@ check pipe_syntax_error 'ls |\nexit\n' '> minishell: erro de sintaxe\n> Encerran
 check pipe_too_many_commands "${nine_stages}\\nexit\\n" '> minishell: comandos demais no pipeline\n> Encerrando o minishell.\n'
 check builtin_in_pipeline 'cd /tmp | cat\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
 check_contains pipe_missing_command_keeps_going 'naoexiste | echo ok\nexit\n' 'ok'
+check_contains trace_fork_exec_wait_fork 'echo hi\nexit\n' '[trace] fork -> child ' --trace
+check_contains trace_fork_exec_wait_execvp 'echo hi\nexit\n' '[trace] execvp echo' --trace
+check_contains trace_fork_exec_wait_wait 'echo hi\nexit\n' '[trace] wait ' --trace
+rm -f /tmp/ms_t.txt
+check_contains trace_redirect 'echo hi > /tmp/ms_t.txt\nexit\n' '[trace] dup2(' --trace
+rm -f /tmp/ms_t.txt
+check_contains trace_pipe 'echo hi | cat\nexit\n' '[trace] pipe -> ' --trace
+check_not_contains trace_off_by_default 'echo hi\nexit\n' '[trace]'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

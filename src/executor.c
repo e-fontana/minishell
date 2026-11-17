@@ -8,6 +8,18 @@
 
 #include "executor.h"
 #include "output.h"
+#include "trace.h"
+
+static void report_error(const char *message, const char *subject, int error_number)
+{
+    write_str(STDERR_FILENO, "minishell: ");
+    write_str(STDERR_FILENO, message);
+    if (subject != NULL)
+        write_str(STDERR_FILENO, subject);
+    write_str(STDERR_FILENO, ": ");
+    write_str(STDERR_FILENO, strerror(error_number));
+    write_str(STDERR_FILENO, "\n");
+}
 
 static void report_exec_failure(const char *name, int error)
 {
@@ -16,11 +28,7 @@ static void report_exec_failure(const char *name, int error)
         write_str(STDERR_FILENO, name);
         write_str(STDERR_FILENO, "\n");
     } else {
-        write_str(STDERR_FILENO, "minishell: nao foi possivel executar ");
-        write_str(STDERR_FILENO, name);
-        write_str(STDERR_FILENO, ": ");
-        write_str(STDERR_FILENO, strerror(error));
-        write_str(STDERR_FILENO, "\n");
+        report_error("nao foi possivel executar ", name, error);
     }
 }
 
@@ -45,14 +53,14 @@ static void close_stage_fds(const StageFds *fds)
 
 static void move_fd(int fd, int target)
 {
-    if (fd < 0 || dup2(fd, target) >= 0)
+    if (fd < 0 || fd == target)
         return;
-
-    int error = errno;
-    write_str(STDERR_FILENO, "minishell: erro no dup2: ");
-    write_str(STDERR_FILENO, strerror(error));
-    write_str(STDERR_FILENO, "\n");
-    _exit(1);
+    if (dup2(fd, target) < 0) {
+        report_error("erro no dup2", NULL, errno);
+        _exit(1);
+    }
+    trace("[trace] dup2(%d, %d)\n", fd, target);
+    close(fd);
 }
 
 static void redirect_output(const char *path)
@@ -60,18 +68,10 @@ static void redirect_output(const char *path)
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     if (fd < 0) {
-        int error = errno;
-        write_str(STDERR_FILENO, "minishell: nao foi possivel abrir ");
-        write_str(STDERR_FILENO, path);
-        write_str(STDERR_FILENO, ": ");
-        write_str(STDERR_FILENO, strerror(error));
-        write_str(STDERR_FILENO, "\n");
+        report_error("nao foi possivel abrir ", path, errno);
         _exit(1);
     }
-    if (fd != STDOUT_FILENO) {
-        move_fd(fd, STDOUT_FILENO);
-        close(fd);
-    }
+    move_fd(fd, STDOUT_FILENO);
 }
 
 static void run_child(const Command *cmd, const StageFds *fds)
@@ -81,9 +81,10 @@ static void run_child(const Command *cmd, const StageFds *fds)
     signal(SIGINT, SIG_DFL);
     move_fd(fds->input, STDIN_FILENO);
     move_fd(fds->output, STDOUT_FILENO);
+    close_fd(fds->next_input);
     if (cmd->out_file != NULL)
         redirect_output(cmd->out_file);
-    close_stage_fds(fds);
+    trace("[trace] execvp %s\n", argv[0]);
     execvp(argv[0], argv);
 
     int error = errno;
@@ -104,6 +105,7 @@ static int open_stage_fds(StageFds *fds, int input, int is_last)
         perror("minishell: erro no pipe");
         return -1;
     }
+    trace("[trace] pipe -> %d %d\n", ends[0], ends[1]);
     fds->next_input = ends[0];
     fds->output = ends[1];
     return 0;
@@ -131,6 +133,7 @@ static int start_stages(const Pipeline *pipeline, pid_t *pids)
         }
         if (pid == 0)
             run_child(&pipeline->cmds[i], &fds);
+        trace("[trace] fork -> child %d\n", (int)pid);
 
         pids[started++] = pid;
         close_fd(fds.input);
@@ -149,12 +152,12 @@ static int wait_child(pid_t pid, int report_signal)
         return 1;
     }
 
-    if (WIFSIGNALED(status)) {
-        if (report_signal)
-            write_str(STDERR_FILENO, "\nminishell: comando interrompido por sinal\n");
-        return 128 + WTERMSIG(status);
-    }
-    return WEXITSTATUS(status);
+    int decoded = WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
+
+    trace("[trace] wait %d -> status %d\n", (int)pid, decoded);
+    if (WIFSIGNALED(status) && report_signal)
+        write_str(STDERR_FILENO, "\nminishell: comando interrompido por sinal\n");
+    return decoded;
 }
 
 int exec_pipeline(const Pipeline *pipeline)
