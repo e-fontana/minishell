@@ -13,7 +13,10 @@ build/%.o: src/%.c include/minishell.h | build
 build:
 	mkdir -p build
 
+test: minishell
+	sh tests/scenarios.sh
+
 clean:
 	rm -rf build minishell
 
-.PHONY: clean
+.PHONY: test clean
