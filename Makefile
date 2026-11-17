@@ -7,7 +7,7 @@ OBJ = $(SRC:src/%.c=build/%.o)
 minishell: $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $(OBJ)
 
-build/%.o: src/%.c include/minishell.h | build
+build/%.o: src/%.c $(wildcard include/*.h) | build
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build:
