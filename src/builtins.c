@@ -50,15 +50,10 @@ void report_builtin_misuse(void)
     write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n");
 }
 
-int builtin_run(const Command *cmd, int *keep_running)
+void builtin_run(const Command *cmd, int *keep_running)
 {
     const Builtin *builtin = find_builtin(cmd->argv[0]);
 
-    if (builtin == NULL)
-        return 0;
-    if (cmd->out_file != NULL)
-        report_builtin_misuse();
-    else
+    if (builtin != NULL)
         builtin->run(cmd->argv, keep_running);
-    return 1;
 }

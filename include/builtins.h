@@ -5,6 +5,6 @@
 
 int is_builtin(const char *name);
 void report_builtin_misuse(void);
-int builtin_run(const Command *cmd, int *keep_running);
+void builtin_run(const Command *cmd, int *keep_running);
 
 #endif

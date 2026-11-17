@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "trace.h"
@@ -15,25 +16,23 @@ void trace_enable(int enabled)
 
 void trace(const char *format, ...)
 {
-    char line[TRACE_LINE_SIZE];
+    char line[TRACE_LINE_SIZE] = "[trace] ";
+    size_t length = strlen(line);
     va_list args;
 
     if (!trace_enabled)
         return;
 
     va_start(args, format);
-    int length = vsnprintf(line, sizeof(line), format, args);
+    int written = vsnprintf(line + length, sizeof(line) - length, format, args);
     va_end(args);
-
-    if (length < 0)
+    if (written < 0)
         return;
-    if (length > TRACE_LINE_SIZE - 1)
-        length = TRACE_LINE_SIZE - 1;
-    if (length == 0 || line[length - 1] != '\n') {
-        if (length == TRACE_LINE_SIZE - 1)
-            length--;
-        line[length++] = '\n';
-    }
-    ssize_t ignored = write(STDERR_FILENO, line, (size_t)length);
+
+    length += (size_t)written;
+    if (length > sizeof(line) - 2)
+        length = sizeof(line) - 2;
+    line[length++] = '\n';
+    ssize_t ignored = write(STDERR_FILENO, line, length);
     (void)ignored;
 }

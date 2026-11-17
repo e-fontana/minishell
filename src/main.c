@@ -56,10 +56,11 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (pipeline.count == 1 && builtin_run(&pipeline.cmds[0], &keep_running))
-            continue;
-        if (pipeline.count > 1 && pipeline_has_builtin(&pipeline)) {
-            report_builtin_misuse();
+        if (pipeline_has_builtin(&pipeline)) {
+            if (pipeline.count == 1 && pipeline.cmds[0].out_file == NULL)
+                builtin_run(&pipeline.cmds[0], &keep_running);
+            else
+                report_builtin_misuse();
             continue;
         }
 

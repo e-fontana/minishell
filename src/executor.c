@@ -1,7 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -10,12 +9,14 @@
 #include "output.h"
 #include "trace.h"
 
-static void report_error(const char *message, const char *subject, int error_number)
+static void report_error(const char *action, const char *subject, int error_number)
 {
     write_str(STDERR_FILENO, "minishell: ");
-    write_str(STDERR_FILENO, message);
-    if (subject != NULL)
+    write_str(STDERR_FILENO, action);
+    if (subject != NULL) {
+        write_str(STDERR_FILENO, " ");
         write_str(STDERR_FILENO, subject);
+    }
     write_str(STDERR_FILENO, ": ");
     write_str(STDERR_FILENO, strerror(error_number));
     write_str(STDERR_FILENO, "\n");
@@ -28,7 +29,7 @@ static void report_exec_failure(const char *name, int error)
         write_str(STDERR_FILENO, name);
         write_str(STDERR_FILENO, "\n");
     } else {
-        report_error("nao foi possivel executar ", name, error);
+        report_error("nao foi possivel executar", name, error);
     }
 }
 
@@ -59,7 +60,7 @@ static void move_fd(int fd, int target)
         report_error("erro no dup2", NULL, errno);
         _exit(1);
     }
-    trace("[trace] dup2(%d, %d)\n", fd, target);
+    trace("dup2(%d, %d)", fd, target);
     close(fd);
 }
 
@@ -68,7 +69,7 @@ static void redirect_output(const char *path)
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     if (fd < 0) {
-        report_error("nao foi possivel abrir ", path, errno);
+        report_error("nao foi possivel abrir", path, errno);
         _exit(1);
     }
     move_fd(fd, STDOUT_FILENO);
@@ -84,7 +85,7 @@ static void run_child(const Command *cmd, const StageFds *fds)
     close_fd(fds->next_input);
     if (cmd->out_file != NULL)
         redirect_output(cmd->out_file);
-    trace("[trace] execvp %s\n", argv[0]);
+    trace("execvp %s", argv[0]);
     execvp(argv[0], argv);
 
     int error = errno;
@@ -102,10 +103,10 @@ static int open_stage_fds(StageFds *fds, int input, int is_last)
     if (is_last)
         return 0;
     if (pipe(ends) < 0) {
-        perror("minishell: erro no pipe");
+        report_error("erro no pipe", NULL, errno);
         return -1;
     }
-    trace("[trace] pipe -> %d %d\n", ends[0], ends[1]);
+    trace("pipe -> %d %d", ends[0], ends[1]);
     fds->next_input = ends[0];
     fds->output = ends[1];
     return 0;
@@ -127,13 +128,13 @@ static int start_stages(const Pipeline *pipeline, pid_t *pids)
         pid_t pid = fork();
 
         if (pid < 0) {
-            perror("minishell: erro no fork");
+            report_error("erro no fork", NULL, errno);
             close_stage_fds(&fds);
             break;
         }
         if (pid == 0)
             run_child(&pipeline->cmds[i], &fds);
-        trace("[trace] fork -> child %d\n", (int)pid);
+        trace("fork -> child %d", (int)pid);
 
         pids[started++] = pid;
         close_fd(fds.input);
@@ -148,13 +149,13 @@ static int wait_child(pid_t pid, int report_signal)
     int status;
 
     if (waitpid(pid, &status, 0) < 0) {
-        perror("minishell: erro no wait");
+        report_error("erro no wait", NULL, errno);
         return 1;
     }
 
     int decoded = WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
 
-    trace("[trace] wait %d -> status %d\n", (int)pid, decoded);
+    trace("wait %d -> status %d", (int)pid, decoded);
     if (WIFSIGNALED(status) && report_signal)
         write_str(STDERR_FILENO, "\nminishell: comando interrompido por sinal\n");
     return decoded;
