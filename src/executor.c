@@ -73,7 +73,7 @@ int exec_command(const Command *cmd)
     if (pid == 0)
         run_child(cmd);
 
-    if (waitpid(pid, &status, 0) < 0) {
+    if (wait(&status) < 0) {
         report_error("erro no wait", NULL, errno);
         return 1;
     }

@@ -55,7 +55,12 @@ check cd_then_pwd 'cd /tmp\npwd\nexit\n' '> > /tmp\n> Encerrando o minishell.\n'
 check line_too_long "${long_line}\\nexit\\n" '> minishell: linha muito longa\n> Encerrando o minishell.\n'
 check too_many_args "${many_args}\\nexit\\n" '> minishell: argumentos demais\n> Encerrando o minishell.\n'
 check echo_args 'echo a b c\nexit\n' '> a b c\n> Encerrando o minishell.\n'
+check_contains ls_args 'ls include\nexit\n' 'parser.h'
 check_contains cat_file 'cat Makefile\nexit\n' 'CFLAGS ='
+check exec_not_permitted '/etc\nexit\n' '> minishell: nao foi possivel executar /etc: Permission denied\n> Encerrando o minishell.\n'
+printf '#!/bin/sh\nkill -TERM $$\n' > "$work/killed_by_signal"
+chmod +x "$work/killed_by_signal"
+check signal_death "$work/killed_by_signal\\nexit\\n" '> \nminishell: comando interrompido por sinal\n> Encerrando o minishell.\n'
 check redirect_writes_file "echo hi > $work/ms_out.txt\\ncat $work/ms_out.txt\\nexit\\n" '> > hi\n> Encerrando o minishell.\n'
 check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao foi possivel abrir /nao/existe/f: No such file or directory\n> Encerrando o minishell.\n'
 check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'

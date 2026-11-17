@@ -3,7 +3,7 @@
 Interpretador de comandos simples para Unix, escrito em C para o Projeto
 Integrador de Sistemas Operacionais (UFBA). Ele lê uma linha, separa o comando
 e seus argumentos e o executa em um processo filho, usando diretamente as
-chamadas ao sistema (`read`, `fork`, `execvp`, `waitpid`, ...) em vez de
+chamadas ao sistema (`read`, `fork`, `execvp`, `wait`, ...) em vez de
 `system()` ou da entrada da stdio.
 
 ## Como compilar e rodar
@@ -41,7 +41,7 @@ Fluxo de dados:
 2. `parse_line` divide a linha em palavras (espaço ou tab) e guarda o arquivo após `>`.
 3. Se a primeira palavra é `cd` ou `exit`, o próprio shell executa o comando.
 4. Caso contrário, `exec_command` faz `fork`; o filho abre o arquivo de saída (se houver) e chama `execvp`.
-5. O pai espera o filho com `waitpid` e volta ao passo 1.
+5. O pai espera o filho com `wait` e volta ao passo 1.
 
 ## Chamadas ao sistema utilizadas
 
@@ -51,14 +51,14 @@ Fluxo de dados:
 | `write()` | `src/output.c` | Escrever o prompt e as mensagens |
 | `fork()` | `src/executor.c` | Criar o processo filho do comando |
 | `execvp()` | `src/executor.c` | Substituir o filho pelo programa, buscando no `PATH` |
-| `waitpid()` | `src/executor.c` | Esperar o filho e obter seu estado de saída |
+| `wait()` | `src/executor.c` | Esperar o filho e obter seu estado de saída |
 | `open()` | `src/executor.c` | Abrir o arquivo após `>` (`O_WRONLY \| O_CREAT \| O_TRUNC`) |
 | `dup2()` | `src/executor.c` | Ligar o arquivo aberto à saída padrão (descritor 1) |
 | `close()` | `src/executor.c` | Fechar o descritor original do arquivo após o `dup2` |
 | `chdir()` | `src/builtins.c` | Comando interno `cd` |
 | `signal()` | `src/main.c`, `src/executor.c` | O shell ignora SIGINT; o filho restaura o padrão |
 | `_exit()` | `src/executor.c` | Encerrar o filho quando `open`, `dup2` ou `execvp` falha |
-| `strerror()` / `perror()` | `src/executor.c` / `src/builtins.c` | Texto do `errno` nas mensagens de erro |
+| `strerror()` / `perror()` (funções da biblioteca C, não chamadas ao sistema) | `src/executor.c` / `src/builtins.c` | Texto do `errno` nas mensagens de erro |
 
 ## Exemplos de comandos testados
 
@@ -91,7 +91,7 @@ pasta
 - Um comando por linha (sem `;`, `&&` ou `||`).
 - `cd` sem argumento é erro; não vai para o `HOME`.
 - Comandos internos (`cd`, `exit`) não aceitam `>`.
-- Operadores precisam de espaços: `a>b` e `ls|wc` são palavras comuns.
+- O `>` precisa de espaços (`a>b` é uma palavra comum). O `|` é sempre uma palavra comum: `ls | wc` passa `|` e `wc` como argumentos de `ls`.
 - Limites: 1023 caracteres por linha e 63 palavras por comando; acima disso a linha é ignorada com um aviso.
 - Sem histórico e sem edição de linha.
 - A entrada é lida um byte por `read()`: simples, porém lento.
