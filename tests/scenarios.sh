@@ -108,6 +108,7 @@ check_contains trace_redirect 'echo hi > /tmp/ms_t.txt\nexit\n' '[trace] dup2(' 
 rm -f /tmp/ms_t.txt
 check_contains trace_pipe 'echo hi | cat\nexit\n' '[trace] pipe -> ' --trace
 check_not_contains trace_off_by_default 'echo hi\nexit\n' '[trace]'
+check_contains trace_off_by_default_keeps_output 'echo hi\nexit\n' '> hi'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
