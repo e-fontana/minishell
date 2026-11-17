@@ -1,134 +1,103 @@
 # Mini Shell
 
-A small Unix command interpreter written in C for the Operating Systems course
-project (Projeto Integrador de Sistemas Operacionais, UFBA). It reads commands
-with `read()`, starts processes with `fork()` and `execvp()`, connects them
-with `pipe()` and `dup2()`, and waits for them with `waitpid()`, calling the
-system directly instead of relying on `system()` or stdio for input. Messages
-printed to the user are in Portuguese without accents.
+Interpretador de comandos simples para Unix, escrito em C para o Projeto
+Integrador de Sistemas Operacionais (UFBA). Ele lê uma linha, separa o comando
+e seus argumentos e o executa em um processo filho, usando diretamente as
+chamadas ao sistema (`read`, `fork`, `execvp`, `wait`, ...) em vez de
+`system()` ou da entrada da stdio.
 
-## Build, run, test
+## Como compilar e rodar
 
-Requirements: Linux, `gcc` and `make`.
-
+Requisitos: Linux, `gcc` e `make`.
 ```bash
-make                    # objects in build/, binary ./minishell
-./minishell             # start the shell; leave with exit or Ctrl+D
-./minishell --trace     # also print system calls to stderr
-make test               # parser unit tests, then end-to-end scenarios
-make clean              # remove build/ and ./minishell
+make            # compila os objetos em build/ e gera ./minishell
+./minishell     # inicia o shell (prompt "> ")
+make test       # testes do parser e, em seguida, cenários de ponta a ponta
+make clean      # remove build/ e ./minishell
 ```
 
-## Supported syntax
+Para sair, digite `exit` ou pressione Ctrl+D (fim da entrada). Ctrl+C
+interrompe o comando em execução, não o shell.
 
-- A simple command with arguments: `ls -l /tmp`.
-- Output redirection to a file (created or truncated): `echo hi > out.txt`.
-  Only on the last command of a line.
-- Pipes between up to 8 commands: `ls | grep c | wc -l`.
-- Builtins `cd DIR` and `exit`, run by the shell itself.
-- Tokens are separated by spaces or tabs, so `ls|wc` and `a>b` are ordinary
-  words, not operators.
-- Malformed `>` or `|` usage (`echo >`, `| ls`, a second `>`, `>` on a
-  non-final command) prints `minishell: erro de sintaxe` and returns to the prompt.
-- Ctrl+C stops the running command, not the shell.
+## Estrutura do código
 
-## Modules
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/main.c` | Laço principal: prompt, leitura, análise, despacho para um comando interno ou para o executor |
+| `src/io/input.c` | `read_line()`: lê uma linha da entrada padrão, um byte por `read()` |
+| `src/parser/parser.c` | `parse_line()`: separa a linha em palavras e no arquivo após `>`; não faz chamadas ao sistema |
+| `src/exec/executor.c` | `exec_command()`: cria o filho, redireciona a saída, executa o programa e espera seu término |
+| `src/exec/builtins.c` | Tabela de comandos internos (`cd`, `exit`) e a mensagem de uso indevido |
+| `src/io/output.c` | `write_str()`: escreve um texto em um descritor com `write()` |
+| `include/parser/parser.h` | Tipos `Command` e `ParseStatus`, limite `MAX_ARGS` e `parse_line()` |
+| `include/io/input.h` | Tipo `ReadStatus`, tamanho `LINE_SIZE` e `read_line()` |
+| `include/exec/executor.h` | `exec_command()` |
+| `include/exec/builtins.h` | `is_builtin()`, `builtin_run()` e `report_builtin_misuse()` |
+| `include/io/output.h` | `write_str()` |
 
-| File              | Responsibility                                                          |
-|-------------------|-------------------------------------------------------------------------|
-| `src/main.c`      | Main loop: prompt, read, parse, dispatch to a builtin or the executor, refuse builtins in a pipeline or with `>`; `--trace` flag |
-| `src/io/input.c`     | `read_line()` reads one line from stdin, one byte per `read()`           |
-| `src/parser/parser.c`    | `parse_line()` splits a line into a `Pipeline` of `Command`s; no system calls |
-| `src/exec/executor.c`  | `exec_pipeline()` creates pipes, forks each stage, redirects, execs and waits |
-| `src/exec/builtins.c`  | Table of builtins (`cd`, `exit`) and the misuse message                  |
-| `src/io/output.c`    | `write_str()` writes a string to a descriptor with `write()`             |
-| `src/util/trace.c`     | `trace()` prints `[trace]` lines to stderr when `--trace` is on          |
+Fluxo de dados:
 
-Each module except `main.c` has a matching `include/<dir>/X.h` (included as `"<dir>/X.h"`) exposing only what
-other modules use.
+1. `main` escreve o prompt `> ` e chama `read_line`, que lê até o `\n`.
+2. `parse_line` divide a linha em palavras (espaço ou tab) e guarda o arquivo após `>`.
+3. Se a primeira palavra é `cd` ou `exit`, o próprio shell executa o comando.
+4. Caso contrário, `exec_command` faz `fork`; o filho abre o arquivo de saída (se houver) e chama `execvp`.
+5. O pai espera o filho com `wait` e volta ao passo 1.
 
-## System calls
+## Chamadas ao sistema utilizadas
 
-| Call        | Module                              | Purpose                                              |
-|-------------|-------------------------------------|------------------------------------------------------|
-| `read()`    | `src/io/input.c`                       | Read the command line from descriptor 0              |
-| `write()`   | `src/io/output.c`, `src/util/trace.c`       | Prompt, messages and trace lines                     |
-| `fork()`    | `src/exec/executor.c`                    | Create one child per command                         |
-| `execvp()`  | `src/exec/executor.c`                    | Replace the child with the program, searching `PATH` |
-| `waitpid()` | `src/exec/executor.c`                    | Wait for each child and decode its status            |
-| `pipe()`    | `src/exec/executor.c`                    | Connect one command's output to the next one's input |
-| `dup2()`    | `src/exec/executor.c`                    | Move pipe ends and the output file onto fds 0 and 1  |
-| `open()`    | `src/exec/executor.c`                    | Open the file after `>` (`O_WRONLY O_CREAT O_TRUNC`) |
-| `close()`   | `src/exec/executor.c`                    | Close unused pipe ends in parent and children        |
-| `chdir()`   | `src/exec/builtins.c`                    | Builtin `cd`                                         |
-| `signal()`  | `src/main.c`, `src/exec/executor.c`      | Shell ignores SIGINT; children restore the default   |
-| `_exit()`   | `src/exec/executor.c`                    | End a child when `open`, `dup2` or `execvp` fails    |
-| `strerror()` | `src/exec/executor.c`                   | Text of `errno` in `open`, `exec`, `dup2`, `pipe`, `fork` and `wait` errors |
-| `perror()`  | `src/exec/builtins.c`                    | Error message of the builtin `cd`                    |
+| Chamada | Módulo | Para quê |
+|---------|--------|----------|
+| `read()` | `src/io/input.c` | Ler a linha de comando do descritor 0 |
+| `write()` | `src/io/output.c` | Escrever o prompt e as mensagens |
+| `fork()` | `src/exec/executor.c` | Criar o processo filho do comando |
+| `execvp()` | `src/exec/executor.c` | Substituir o filho pelo programa, buscando no `PATH` |
+| `wait()` | `src/exec/executor.c` | Esperar o filho e obter seu estado de saída |
+| `open()` | `src/exec/executor.c` | Abrir o arquivo após `>` (`O_WRONLY \| O_CREAT \| O_TRUNC`) |
+| `dup2()` | `src/exec/executor.c` | Ligar o arquivo aberto à saída padrão (descritor 1) |
+| `close()` | `src/exec/executor.c` | Fechar o descritor original do arquivo após o `dup2` |
+| `chdir()` | `src/exec/builtins.c` | Comando interno `cd` |
+| `signal()` | `src/main.c`, `src/exec/executor.c` | O shell ignora SIGINT; o filho restaura o padrão |
+| `_exit()` | `src/exec/executor.c` | Encerrar o filho quando `open`, `dup2` ou `execvp` falha |
+| `strerror()` / `perror()` (funções da biblioteca C, não chamadas ao sistema) | `src/exec/executor.c` / `src/exec/builtins.c` | Texto do `errno` nas mensagens de erro |
 
-Exit statuses of children: 127 command not found, 126 other exec failure,
-1 when the `>` file cannot be opened, 128+n when killed by signal n.
+## Exemplos de comandos testados
 
-## Tracing
-
-With `--trace` (the first argument), the shell writes one line to stderr for
-each `pipe`, `fork`, `dup2`, `execvp` and `waitpid`. Parent and child lines may
-interleave in any order. Captured run:
-
-```
-> echo a b c | wc -w > contagem.txt
-[trace] pipe -> 3 4
-[trace] fork -> child 177259
-[trace] dup2(4, 1)
-[trace] execvp echo
-[trace] fork -> child 177260
-[trace] dup2(3, 0)
-[trace] dup2(3, 1)
-[trace] execvp wc
-[trace] wait 177259 -> status 0
-[trace] wait 177260 -> status 0
-> cat contagem.txt
-[trace] fork -> child 177275
-[trace] execvp cat
-3
-[trace] wait 177275 -> status 0
-> exit
-Encerrando o minishell.
+Sessão real, em um diretório com `notas.txt` (três linhas) e `pasta/dentro.txt`:
+```bash
+printf 'echo Ola mundo\nls\ncat -n notas.txt\ncomandoquenaoexiste\ncd pasta\nls\ncd /nao/existe\ncd ..\necho oi > arquivo\ncat arquivo\nexit\n' | ./minishell
 ```
 
-## Example session
-
+Saída obtida. Como a entrada vem de um pipe, os comandos não aparecem; cada
+`> ` é um prompt, e `cd pasta`, `cd ..` e `echo oi > arquivo` não imprimem nada:
 ```
-> echo Ola mundo
-Ola mundo
-> ls
-Makefile  include  notes.txt  src  tests
-> echo primeira linha > saida.txt
-> cat saida.txt
-primeira linha
-> ls | wc -l
-6
-> echo a b c | wc -w
-3
-> comandoquenaoexiste
-minishell: comando nao encontrado: comandoquenaoexiste
-> cd /nao/existe
-minishell: cd: No such file or directory
-> exit
-Encerrando o minishell.
+> Ola mundo
+> notas.txt
+pasta
+>      1	linha um
+     2	linha dois
+     3	linha tres
+> minishell: comando nao encontrado: comandoquenaoexiste
+> > dentro.txt
+> minishell: cd: No such file or directory
+> > > oi
+> Encerrando o minishell.
 ```
 
-## Limits
+## Limitações conhecidas
 
-1023 characters per line, 63 words per command, 8 commands per pipeline. Over
-a limit the shell prints a warning, ignores the line and keeps running.
+- Sem pipes (`|`), sem `<`, sem `>>` e sem execução em segundo plano (`&`).
+- Sem aspas nem escapes: `echo "a b"` passa as aspas como parte das palavras.
+- Sem expansão de `$VAR`, `~` ou curingas (`*`, `?`).
+- Um comando por linha (sem `;`, `&&` ou `||`).
+- `cd` sem argumento é erro; não vai para o `HOME`.
+- Comandos internos (`cd`, `exit`) não aceitam `>`.
+- O `>` precisa de espaços (`a>b` é uma palavra comum). O `|` é sempre uma palavra comum: `ls | wc` passa `|` e `wc` como argumentos de `ls`.
+- Limites: 1023 caracteres por linha e 63 palavras por comando; acima disso a linha é ignorada com um aviso.
+- Sem histórico e sem edição de linha.
+- A entrada é lida um byte por `read()`: simples, porém lento.
 
-## Known limitations
+## Testes
 
-- No quotes or escapes: `echo "a   b"` splits on spaces and passes the quotes.
-- No expansion of `$VAR`, `~` or wildcards.
-- No `<`, no `>>`, no background `&`, no `;`, `&&` or `||`.
-- Builtins cannot be used inside a pipeline or with `>`.
-- `cd` needs a directory; it does not default to `HOME`.
-- No history and no line editing.
-- Input is read one byte per `read()`: simple, but slow.
+`make test` roda `tests/test_parser.c` (testes unitários de `parse_line()`: linhas
+vazias, separadores, limite de palavras, `>` e erros de sintaxe) e depois
+`tests/scenarios.sh` (executa o `./minishell` com entradas prontas e compara a saída).

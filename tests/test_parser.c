@@ -4,317 +4,106 @@
 
 #include "parser/parser.h"
 
-static void build_words(char *line, int word_count)
+static char buffer[256];
+static Command cmd;
+
+static ParseStatus parse(const char *text)
 {
-    line[0] = '\0';
-    for (int i = 0; i < word_count; i++)
-        strcat(line, i == 0 ? "w" : " w");
+    strcpy(buffer, text);
+    return parse_line(buffer, &cmd);
 }
 
-static void build_commands(char *line, int command_count)
+static void expect_words(const char *text, int argc, const char *const *words)
 {
-    line[0] = '\0';
-    for (int i = 0; i < command_count; i++)
-        strcat(line, i == 0 ? "echo a" : " | echo a");
+    assert(parse(text) == PARSE_OK);
+    assert(cmd.argc == argc);
+    for (int i = 0; i < argc; i++)
+        assert(strcmp(cmd.argv[i], words[i]) == 0);
+    assert(cmd.argv[argc] == NULL);
+    assert(cmd.out_file == NULL);
 }
 
-static void test_empty_line(void)
+static void test_empty_lines(void)
 {
-    char line[] = "";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_EMPTY);
+    assert(parse("") == PARSE_EMPTY);
+    assert(parse("  \t ") == PARSE_EMPTY);
 }
 
-static void test_blank_line(void)
+static void test_plain_words(void)
 {
-    char line[] = "  \t ";
-    Pipeline pipeline;
+    const char *ls[] = { "ls" };
+    const char *ls_l[] = { "ls", "-l" };
+    const char *ls_tmp[] = { "ls", "-l", "/tmp" };
+    const char *echo_hi[] = { "echo", "hi" };
 
-    assert(parse_line(line, &pipeline) == PARSE_EMPTY);
+    expect_words("ls", 1, ls);
+    expect_words("ls -l /tmp", 3, ls_tmp);
+    expect_words("echo\thi", 2, echo_hi);
+    expect_words("  ls", 1, ls);
+    expect_words("ls  ", 1, ls);
+    expect_words("\t ls -l \t", 2, ls_l);
 }
 
-static void test_single_word(void)
+static void test_operators_need_spaces(void)
 {
-    char line[] = "ls";
-    Pipeline pipeline;
+    const char *pipe_word[] = { "ls|wc" };
+    const char *redirect_word[] = { "a>b" };
+    const char *pipe_spaced[] = { "ls", "|", "wc" };
 
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.count == 1);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls") == 0);
-    assert(pipeline.cmds[0].argv[1] == NULL);
-}
-
-static void test_words_with_args(void)
-{
-    char line[] = "ls -l /tmp";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 3);
-    assert(strcmp(pipeline.cmds[0].argv[2], "/tmp") == 0);
-    assert(pipeline.cmds[0].argv[3] == NULL);
-}
-
-static void test_tab_separator(void)
-{
-    char line[] = "echo\thi";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 2);
+    expect_words("ls|wc", 1, pipe_word);
+    expect_words("a>b", 1, redirect_word);
+    expect_words("ls | wc", 3, pipe_spaced);
 }
 
 static void test_max_args_boundary(void)
 {
-    char line[256];
-    Pipeline pipeline;
+    char line[256] = "";
 
-    build_words(line, MAX_ARGS - 1);
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == MAX_ARGS - 1);
-    assert(pipeline.cmds[0].argv[MAX_ARGS - 1] == NULL);
+    for (int i = 0; i < MAX_ARGS - 1; i++)
+        strcat(line, i == 0 ? "w" : " w");
+    assert(parse(line) == PARSE_OK);
+    assert(cmd.argc == MAX_ARGS - 1);
+    assert(strcmp(cmd.argv[MAX_ARGS - 2], "w") == 0);
+    assert(cmd.argv[MAX_ARGS - 1] == NULL);
 
-    build_words(line, MAX_ARGS);
-    assert(parse_line(line, &pipeline) == PARSE_TOO_MANY_ARGS);
-    assert(pipeline.count == 0);
-}
-
-static void test_leading_and_trailing_whitespace(void)
-{
-    char leading[] = "  ls";
-    char trailing[] = "ls  ";
-    char mixed[] = "\t ls -l \t";
-    Pipeline pipeline;
-
-    assert(parse_line(leading, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls") == 0);
-
-    assert(parse_line(trailing, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls") == 0);
-
-    assert(parse_line(mixed, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 2);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls") == 0);
-    assert(strcmp(pipeline.cmds[0].argv[1], "-l") == 0);
-    assert(pipeline.cmds[0].argv[2] == NULL);
+    strcat(line, " w");
+    assert(parse(line) == PARSE_TOO_MANY_ARGS);
+    assert(cmd.argc == MAX_ARGS - 1);
+    assert(cmd.argv[MAX_ARGS - 1] == NULL);
+    assert(cmd.out_file == NULL);
 }
 
 static void test_redirect(void)
 {
-    char line[] = "echo hi > out.txt";
-    Pipeline pipeline;
+    assert(parse("echo hi > out.txt") == PARSE_OK);
+    assert(cmd.argc == 2);
+    assert(strcmp(cmd.argv[0], "echo") == 0);
+    assert(strcmp(cmd.argv[1], "hi") == 0);
+    assert(cmd.argv[2] == NULL);
+    assert(strcmp(cmd.out_file, "out.txt") == 0);
 
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.count == 1);
-    assert(pipeline.cmds[0].argc == 2);
-    assert(strcmp(pipeline.cmds[0].argv[0], "echo") == 0);
-    assert(strcmp(pipeline.cmds[0].argv[1], "hi") == 0);
-    assert(pipeline.cmds[0].argv[2] == NULL);
-    assert(pipeline.cmds[0].out_file != NULL);
-    assert(strcmp(pipeline.cmds[0].out_file, "out.txt") == 0);
+    assert(parse("echo x > f extra") == PARSE_OK);
+    assert(cmd.argc == 3);
+    assert(strcmp(cmd.argv[2], "extra") == 0);
+    assert(cmd.argv[3] == NULL);
+    assert(strcmp(cmd.out_file, "f") == 0);
 }
 
-static void test_no_redirect_leaves_out_file_null(void)
+static void test_redirect_syntax_errors(void)
 {
-    char line[] = "echo hi";
-    Pipeline pipeline;
+    const char *lines[] = { "echo hi >", "echo a > b > c", "> out.txt", "echo > >", ">" };
 
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].out_file == NULL);
-}
-
-static void test_redirect_missing_file(void)
-{
-    char line[] = "echo hi >";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_redirect_twice(void)
-{
-    char line[] = "echo a > b > c";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_redirect_without_command(void)
-{
-    char line[] = "> out.txt";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_no_spaces_are_one_word(void)
-{
-    char pipe_line[] = "ls|wc";
-    char redirect_line[] = "a>b";
-    Pipeline pipeline;
-
-    assert(parse_line(pipe_line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls|wc") == 0);
-
-    assert(parse_line(redirect_line, &pipeline) == PARSE_OK);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "a>b") == 0);
-    assert(pipeline.cmds[0].out_file == NULL);
-}
-
-static void test_redirect_after_redirect_token(void)
-{
-    char line[] = "echo > >";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_redirect_alone(void)
-{
-    char line[] = ">";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_redirect_keeps_trailing_words(void)
-{
-    char line[] = "echo x > f extra";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.count == 1);
-    assert(pipeline.cmds[0].argc == 3);
-    assert(strcmp(pipeline.cmds[0].argv[0], "echo") == 0);
-    assert(strcmp(pipeline.cmds[0].argv[1], "x") == 0);
-    assert(strcmp(pipeline.cmds[0].argv[2], "extra") == 0);
-    assert(pipeline.cmds[0].argv[3] == NULL);
-    assert(strcmp(pipeline.cmds[0].out_file, "f") == 0);
-}
-
-static void test_redirect_into_pipe_token(void)
-{
-    char line[] = "echo > | cat";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_pipe_two(void)
-{
-    char line[] = "ls | wc -l";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.count == 2);
-    assert(pipeline.cmds[0].argc == 1);
-    assert(strcmp(pipeline.cmds[0].argv[0], "ls") == 0);
-    assert(pipeline.cmds[0].argv[1] == NULL);
-    assert(pipeline.cmds[0].out_file == NULL);
-    assert(pipeline.cmds[1].argc == 2);
-    assert(strcmp(pipeline.cmds[1].argv[0], "wc") == 0);
-    assert(strcmp(pipeline.cmds[1].argv[1], "-l") == 0);
-    assert(pipeline.cmds[1].argv[2] == NULL);
-    assert(pipeline.cmds[1].out_file == NULL);
-}
-
-static void test_pipe_leading(void)
-{
-    char line[] = "| ls";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_pipe_trailing(void)
-{
-    char line[] = "ls |";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_pipe_double(void)
-{
-    char line[] = "ls | | wc";
-    Pipeline pipeline;
-
-    assert(parse_line(line, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-}
-
-static void test_redirect_only_on_last_stage(void)
-{
-    char middle[] = "echo a > f | cat";
-    char last[] = "echo a | cat > f";
-    Pipeline pipeline;
-
-    assert(parse_line(middle, &pipeline) == PARSE_SYNTAX_ERROR);
-    assert(pipeline.count == 0);
-
-    assert(parse_line(last, &pipeline) == PARSE_OK);
-    assert(pipeline.count == 2);
-    assert(pipeline.cmds[0].out_file == NULL);
-    assert(pipeline.cmds[1].argc == 1);
-    assert(strcmp(pipeline.cmds[1].argv[0], "cat") == 0);
-    assert(pipeline.cmds[1].out_file != NULL);
-    assert(strcmp(pipeline.cmds[1].out_file, "f") == 0);
-}
-
-static void test_max_cmds_boundary(void)
-{
-    char line[256];
-    Pipeline pipeline;
-
-    build_commands(line, MAX_CMDS);
-    assert(parse_line(line, &pipeline) == PARSE_OK);
-    assert(pipeline.count == MAX_CMDS);
-    assert(strcmp(pipeline.cmds[MAX_CMDS - 1].argv[0], "echo") == 0);
-    assert(pipeline.cmds[MAX_CMDS - 1].argc == 2);
-
-    build_commands(line, MAX_CMDS + 1);
-    assert(parse_line(line, &pipeline) == PARSE_TOO_MANY_CMDS);
-    assert(pipeline.count == 0);
+    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); i++)
+        assert(parse(lines[i]) == PARSE_SYNTAX_ERROR);
 }
 
 int main(void)
 {
-    test_empty_line();
-    test_blank_line();
-    test_single_word();
-    test_words_with_args();
-    test_tab_separator();
+    test_empty_lines();
+    test_plain_words();
+    test_operators_need_spaces();
     test_max_args_boundary();
-    test_no_spaces_are_one_word();
-    test_leading_and_trailing_whitespace();
     test_redirect();
-    test_no_redirect_leaves_out_file_null();
-    test_redirect_missing_file();
-    test_redirect_twice();
-    test_redirect_without_command();
-    test_redirect_after_redirect_token();
-    test_redirect_alone();
-    test_redirect_keeps_trailing_words();
-    test_redirect_into_pipe_token();
-    test_pipe_two();
-    test_pipe_leading();
-    test_pipe_trailing();
-    test_pipe_double();
-    test_redirect_only_on_last_stage();
-    test_max_cmds_boundary();
+    test_redirect_syntax_errors();
     return 0;
 }
