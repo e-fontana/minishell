@@ -47,7 +47,7 @@ int is_builtin(const char *name)
 
 void report_builtin_misuse(void)
 {
-    write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento\n");
+    write_str(STDERR_FILENO, "minishell: comando interno nao pode ser usado com redirecionamento\n");
 }
 
 void builtin_run(const Command *cmd, int *keep_running)

@@ -61,8 +61,7 @@ repeat() {
 
 long_line=$(repeat a 1100)
 many_args="echo$(repeat ' x' 70)"
-nine_stages="echo a$(repeat ' | echo a' 8)"
-builtin_message='minishell: comando interno nao pode ser usado em pipeline ou com redirecionamento'
+builtin_message='minishell: comando interno nao pode ser usado com redirecionamento'
 
 check echo_then_exit 'echo hi\nexit\n' '> hi\n> Encerrando o minishell.\n'
 check eof_after_command 'echo hi\n' '> hi\n> \nEncerrando o minishell.\n'
@@ -81,14 +80,6 @@ check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao fo
 check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
 check builtin_with_redirect "cd /tmp > $work/ms_builtin_redirect.txt\\nexit\\n" "> ${builtin_message}\\n> Encerrando o minishell.\\n"
 check_absent builtin_with_redirect_creates_no_file "$work/ms_builtin_redirect.txt"
-check pipe_basic 'echo a b c | wc -w\nexit\n' '> 3\n> Encerrando o minishell.\n'
-check pipe_three_stages 'echo hi | cat | cat\nexit\n' '> hi\n> Encerrando o minishell.\n'
-check pipe_does_not_hang 'yes | head -1\nexit\n' '> y\n> Encerrando o minishell.\n'
-check pipe_into_file "echo hi | cat > $work/ms_p.txt\\ncat $work/ms_p.txt\\nexit\\n" '> > hi\n> Encerrando o minishell.\n'
-check pipe_syntax_error 'ls |\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
-check pipe_too_many_commands "${nine_stages}\\nexit\\n" '> minishell: comandos demais no pipeline\n> Encerrando o minishell.\n'
-check builtin_in_pipeline 'cd /tmp | cat\nexit\n' "> ${builtin_message}\\n> Encerrando o minishell.\\n"
-check_contains pipe_missing_command_keeps_going 'naoexiste | echo ok\nexit\n' 'ok'
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

@@ -13,22 +13,12 @@ static void report_parse_error(ParseStatus status)
         write_str(STDERR_FILENO, "minishell: argumentos demais\n");
     else if (status == PARSE_SYNTAX_ERROR)
         write_str(STDERR_FILENO, "minishell: erro de sintaxe\n");
-    else if (status == PARSE_TOO_MANY_CMDS)
-        write_str(STDERR_FILENO, "minishell: comandos demais no pipeline\n");
-}
-
-static int pipeline_has_builtin(const Pipeline *pipeline)
-{
-    for (int i = 0; i < pipeline->count; i++)
-        if (is_builtin(pipeline->cmds[i].argv[0]))
-            return 1;
-    return 0;
 }
 
 int main(void)
 {
     char line[LINE_SIZE];
-    Pipeline pipeline;
+    Command cmd;
     int keep_running = 1;
 
     signal(SIGINT, SIG_IGN);
@@ -46,21 +36,21 @@ int main(void)
             continue;
         }
 
-        ParseStatus parse_status = parse_line(line, &pipeline);
+        ParseStatus parse_status = parse_line(line, &cmd);
         if (parse_status != PARSE_OK) {
             report_parse_error(parse_status);
             continue;
         }
 
-        if (pipeline_has_builtin(&pipeline)) {
-            if (pipeline.count == 1 && pipeline.cmds[0].out_file == NULL)
-                builtin_run(&pipeline.cmds[0], &keep_running);
+        if (is_builtin(cmd.argv[0])) {
+            if (cmd.out_file == NULL)
+                builtin_run(&cmd, &keep_running);
             else
                 report_builtin_misuse();
             continue;
         }
 
-        exec_pipeline(&pipeline);
+        exec_command(&cmd);
     }
 
     write_str(STDOUT_FILENO, "Encerrando o minishell.\n");
