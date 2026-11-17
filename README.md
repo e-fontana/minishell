@@ -28,13 +28,15 @@ make clean              # remove build/ and ./minishell
 - Builtins `cd DIR` and `exit`, run by the shell itself.
 - Tokens are separated by spaces or tabs, so `ls|wc` and `a>b` are ordinary
   words, not operators.
+- Malformed `>` or `|` usage (`echo >`, `| ls`, a second `>`, `>` on a
+  non-final command) prints `minishell: erro de sintaxe` and returns to the prompt.
 - Ctrl+C stops the running command, not the shell.
 
 ## Modules
 
 | File              | Responsibility                                                          |
 |-------------------|-------------------------------------------------------------------------|
-| `src/main.c`      | Main loop: prompt, read, parse, dispatch to a builtin or the executor; `--trace` flag |
+| `src/main.c`      | Main loop: prompt, read, parse, dispatch to a builtin or the executor, refuse builtins in a pipeline or with `>`; `--trace` flag |
 | `src/input.c`     | `read_line()` reads one line from stdin, one byte per `read()`           |
 | `src/parser.c`    | `parse_line()` splits a line into a `Pipeline` of `Command`s; no system calls |
 | `src/executor.c`  | `exec_pipeline()` creates pipes, forks each stage, redirects, execs and waits |
@@ -61,6 +63,8 @@ other modules use.
 | `chdir()`   | `src/builtins.c`                    | Builtin `cd`                                         |
 | `signal()`  | `src/main.c`, `src/executor.c`      | Shell ignores SIGINT; children restore the default   |
 | `_exit()`   | `src/executor.c`                    | End a child when `open`, `dup2` or `execvp` fails    |
+| `strerror()` | `src/executor.c`                   | Text of `errno` in `open`, `exec`, `dup2`, `pipe`, `fork` and `wait` errors |
+| `perror()`  | `src/builtins.c`                    | Error message of the builtin `cd`                    |
 
 Exit statuses of children: 127 command not found, 126 other exec failure,
 1 when the `>` file cannot be opened, 128+n when killed by signal n.
