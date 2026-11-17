@@ -7,7 +7,6 @@
 
 #include "executor.h"
 #include "output.h"
-#include "trace.h"
 
 static void report_error(const char *action, const char *subject, int error_number)
 {
@@ -60,7 +59,6 @@ static void move_fd(int fd, int target)
         report_error("erro no dup2", NULL, errno);
         _exit(1);
     }
-    trace("dup2(%d, %d)", fd, target);
     close(fd);
 }
 
@@ -85,7 +83,6 @@ static void run_child(const Command *cmd, const StageFds *fds)
     close_fd(fds->next_input);
     if (cmd->out_file != NULL)
         redirect_output(cmd->out_file);
-    trace("execvp %s", argv[0]);
     execvp(argv[0], argv);
 
     int error = errno;
@@ -106,7 +103,6 @@ static int open_stage_fds(StageFds *fds, int input, int is_last)
         report_error("erro no pipe", NULL, errno);
         return -1;
     }
-    trace("pipe -> %d %d", ends[0], ends[1]);
     fds->next_input = ends[0];
     fds->output = ends[1];
     return 0;
@@ -134,7 +130,6 @@ static int start_stages(const Pipeline *pipeline, pid_t *pids)
         }
         if (pid == 0)
             run_child(&pipeline->cmds[i], &fds);
-        trace("fork -> child %d", (int)pid);
 
         pids[started++] = pid;
         close_fd(fds.input);
@@ -155,7 +150,6 @@ static int wait_child(pid_t pid, int report_signal)
 
     int decoded = WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
 
-    trace("wait %d -> status %d", (int)pid, decoded);
     if (WIFSIGNALED(status) && report_signal)
         write_str(STDERR_FILENO, "\nminishell: comando interrompido por sinal\n");
     return decoded;
