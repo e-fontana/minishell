@@ -1,7 +1,7 @@
 #ifndef BUILTINS_H
 #define BUILTINS_H
 
-#include "parser.h"
+#include "parser/parser.h"
 
 int is_builtin(const char *name);
 void report_builtin_misuse(void);

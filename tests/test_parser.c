@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "parser.h"
+#include "parser/parser.h"
 
 static char buffer[256];
 static Command cmd;

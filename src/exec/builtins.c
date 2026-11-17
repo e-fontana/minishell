@@ -2,8 +2,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "builtins.h"
-#include "output.h"
+#include "exec/builtins.h"
+#include "io/output.h"
 
 typedef struct {
     const char *name;

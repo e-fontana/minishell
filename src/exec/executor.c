@@ -5,8 +5,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "executor.h"
-#include "output.h"
+#include "exec/executor.h"
+#include "io/output.h"
 
 static void report_error(const char *action, const char *subject, int error_number)
 {
