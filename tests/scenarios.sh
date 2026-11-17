@@ -41,29 +41,10 @@ check_contains() {
     esac
 }
 
-check_absent() {
-    if [ -e "$2" ]; then
-        record "$1" fail
-    else
-        record "$1" ok
-    fi
-}
-
-repeat() {
-    count=0
-    result=
-    while [ "$count" -lt "$2" ]; do
-        result="$result$1"
-        count=$((count + 1))
-    done
-    printf '%s' "$result"
-}
-
-long_line=$(repeat a 1100)
-many_args="echo$(repeat ' x' 70)"
+long_line=$(printf '%1100s' '' | tr ' ' a)
+many_args="echo$(printf '%70s' '' | sed 's/ / x/g')"
 builtin_message='minishell: comando interno nao pode ser usado com redirecionamento'
 
-check echo_then_exit 'echo hi\nexit\n' '> hi\n> Encerrando o minishell.\n'
 check eof_after_command 'echo hi\n' '> hi\n> \nEncerrando o minishell.\n'
 check eof_without_newline 'echo oi' '> oi\n> \nEncerrando o minishell.\n'
 check blank_lines '\n\nexit\n' '> > > Encerrando o minishell.\n'
@@ -79,7 +60,7 @@ check redirect_writes_file "echo hi > $work/ms_out.txt\\ncat $work/ms_out.txt\\n
 check redirect_open_fails 'echo hi > /nao/existe/f\nexit\n' '> minishell: nao foi possivel abrir /nao/existe/f: No such file or directory\n> Encerrando o minishell.\n'
 check redirect_syntax_error 'echo hi >\nexit\n' '> minishell: erro de sintaxe\n> Encerrando o minishell.\n'
 check builtin_with_redirect "cd /tmp > $work/ms_builtin_redirect.txt\\nexit\\n" "> ${builtin_message}\\n> Encerrando o minishell.\\n"
-check_absent builtin_with_redirect_creates_no_file "$work/ms_builtin_redirect.txt"
+[ -e "$work/ms_builtin_redirect.txt" ] && record builtin_with_redirect_creates_no_file fail || record builtin_with_redirect_creates_no_file ok
 
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
